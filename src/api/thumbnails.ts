@@ -4,6 +4,7 @@ import { getVideo, updateVideo } from "../db/videos";
 import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
+import path from 'node:path';
 
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const { videoId } = req.params as { videoId?: string };
@@ -26,10 +27,9 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   if(thumbnail.size > MAX_UPLOAD_SIZE){
     throw new BadRequestError("Thumbnail file size is too heavy");
   }
-  const thumbnailType = thumbnail.type;
   const thumbnailData = await thumbnail.arrayBuffer();
   
-  const videoMetaData = getVideo(cfg.db, videoId);
+  const videoMetaData =  getVideo(cfg.db, videoId);
   if(!videoMetaData){
     throw new NotFoundError("Video was not found")
   }
@@ -37,9 +37,10 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     throw new UserForbiddenError("This user have no access to this video");
   }
 
-  const base64Encoded = Buffer.from(thumbnailData).toString("base64");
-  const newDataUrl = `data:${thumbnailType};base64,${base64Encoded}`;
-  videoMetaData.thumbnailURL = newDataUrl;
+  const ext = thumbnail.type.split("/")[1]
+  const newDataFilePath = path.join(cfg.assetsRoot, `${videoId}.${ext}`)
+  await Bun.write(newDataFilePath, thumbnailData)
+  videoMetaData.thumbnailURL = `http://localhost:${cfg.port}/assets/${videoId}.${ext}`;
   updateVideo(cfg.db, videoMetaData);
 
   return respondWithJSON(200, videoMetaData);
