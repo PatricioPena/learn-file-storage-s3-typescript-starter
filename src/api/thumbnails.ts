@@ -5,37 +5,6 @@ import type { ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 
-type Thumbnail = {
-  data: ArrayBuffer;
-  mediaType: string;
-};
-
-const videoThumbnails: Map<string, Thumbnail> = new Map();
-
-export async function handlerGetThumbnail(cfg: ApiConfig, req: BunRequest) {
-  const { videoId } = req.params as { videoId?: string };
-  if (!videoId) {
-    throw new BadRequestError("Invalid video ID");
-  }
-
-  const video = getVideo(cfg.db, videoId);
-  if (!video) {
-    throw new NotFoundError("Couldn't find video");
-  }
-
-  const thumbnail = videoThumbnails.get(videoId);
-  if (!thumbnail) {
-    throw new NotFoundError("Thumbnail not found");
-  }
-
-  return new Response(thumbnail.data, {
-    headers: {
-      "Content-Type": thumbnail.mediaType,
-      "Cache-Control": "no-store",
-    },
-  });
-}
-
 export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   const { videoId } = req.params as { videoId?: string };
   if (!videoId) {
@@ -47,7 +16,7 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
 
   console.log("uploading thumbnail for video", videoId, "by user", userID);
 
-  // TODO: implement the upload here
+  //  TODO: implement the upload here
   const result = await req.formData();
   const thumbnail = result.get("thumbnail");
   if(!(thumbnail instanceof File)){
@@ -67,13 +36,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
   if(videoMetaData.userID != userID){
     throw new UserForbiddenError("This user have no access to this video");
   }
-  videoThumbnails.set(videoId, {
-    data: thumbnailData,
-    mediaType: thumbnailType
-  })
 
-  const thumbnailUrl = `http://localhost:${cfg.port}/api/thumbnails/${videoId}`
-  videoMetaData.thumbnailURL = thumbnailUrl;
+  const base64Encoded = Buffer.from(thumbnailData).toString("base64");
+  const newDataUrl = `data:${thumbnailType};base64,${base64Encoded}`;
+  videoMetaData.thumbnailURL = newDataUrl;
   updateVideo(cfg.db, videoMetaData);
+
   return respondWithJSON(200, videoMetaData);
 }
