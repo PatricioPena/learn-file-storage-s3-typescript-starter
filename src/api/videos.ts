@@ -5,7 +5,7 @@ import type { BunRequest } from "bun";
 import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { getBearerToken, validateJWT } from "../auth";
 import { getVideo, updateVideo } from "../db/videos";
-import path from "path";
+import path, { parse } from "path";
 import { uploadVideoToS3 } from "../s3";
 import { rm } from "fs/promises";
 
@@ -53,7 +53,8 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   const tempFilePath = path.join("/tmp", `${videoId}.mp4`);
   await Bun.write(tempFilePath, file);
 
-  const key = `${videoId}.mp4`;
+  const landscape = await getVideoAspectRadio(tempFilePath);
+  const key = `${landscape}/${videoId}.mp4`;
   await uploadVideoToS3(cfg, key, tempFilePath, "video/mp4");
 
   const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
@@ -64,3 +65,34 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
 
   return respondWithJSON(200, video);
 }
+
+export async function getVideoAspectRadio(filepath: string){
+  const ffprobe = Bun.spawn({
+    cmd: ["ffprobe", "-v", "error", "-select_streams", "v:0",
+      "-show_entries", "stream=width,height", "-of", "json", filepath]
+  });
+
+  const stdoutText = await new Response(ffprobe.stdout).text();
+  const stderrText = await new Response(ffprobe.stderr).text();
+  const exitCode = await ffprobe.exited;
+  if(exitCode !== 0){
+    throw new Error("")
+  }
+  const parsedOut = JSON.parse(stdoutText);
+  const width = parsedOut.streams[0].width;
+  const height = parsedOut.streams[0].height;
+  const value = width/height;
+  let ratio;
+  if(1.7 < value && value < 1.8){
+    ratio = "landscape"
+  }
+  else if(0.56 < value && value < 0.6){
+    ratio = "portrait"
+  }
+  else{
+    ratio = "other"
+  }
+  return ratio;
+}
+
+// ffprobe -v error -print_format json -show_streams ./samples/boots-image-horizontal.png
