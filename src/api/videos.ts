@@ -110,3 +110,5 @@ export async function processVideoForFastStart(inputFilePath: string){
   }
   return outputFilePath;
 }
+
+// aws s3 cp ./samples/boots-image-horizontal.png s3://tubely-11702
