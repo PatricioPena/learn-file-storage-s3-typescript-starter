@@ -6,7 +6,7 @@ import { BadRequestError, NotFoundError, UserForbiddenError } from "./errors";
 import { getBearerToken, validateJWT } from "../auth";
 import { getVideo, updateVideo, type Video } from "../db/videos";
 import path, { parse } from "path";
-import { generatePresignedURL, uploadVideoToS3 } from "../s3";
+import { uploadVideoToS3 } from "../s3";
 import { rm } from "fs/promises";
 
 
@@ -60,16 +60,19 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
   await uploadVideoToS3(cfg, key, outputFile, "video/mp4");
 
   //const videoURL = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${key}`;
-  const videoURL = key;
+  const videoURL = `${cfg.s3CfDistribution}/${key}`;
   video.videoURL = videoURL;
   updateVideo(cfg.db, video);
 
   await rm(tempFilePath, { force: true });
   await rm(outputFile, { force: true });
-  const signedVideo = await dbVideoToSignedVideo(cfg, video);
+  //const signedVideo = await dbVideoToSignedVideo(cfg, video);
 
-  return respondWithJSON(200, signedVideo);
+  //return respondWithJSON(200, signedVideo);
+  return respondWithJSON(200, video);
 }
+
+
 
 export async function getVideoAspectRadio(filepath: string) {
   const ffprobe = Bun.spawn({
@@ -112,15 +115,3 @@ export async function processVideoForFastStart(inputFilePath: string) {
   }
   return outputFilePath;
 }
-
-export async function dbVideoToSignedVideo(cfg: ApiConfig, video: Video) {
-  const key = video.videoURL;
-  if (!key) {
-    return video
-  }
-  const presigned = await generatePresignedURL(cfg, key, 60 * 60);
-  video.videoURL = presigned;
-  return video
-}
-
-// aws s3 cp ./samples/boots-image-horizontal.png s3://tubely-11702
